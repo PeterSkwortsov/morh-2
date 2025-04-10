@@ -1,31 +1,53 @@
-uniform vec2 uResolution;
-uniform float uSize;
-uniform sampler2D uParticlesTexture;
+#include ../includes/simplexNoise4d.glsl
+attribute vec4 tangent;
 
-attribute vec2 aParticlesUv;
-attribute vec3 aColor;
-attribute float aSize;
+uniform float uTime;
+uniform float uPositionFrequency;
+uniform float uTimeFrequency;
+uniform float uStrength;
 
-varying vec3 vColor;
+uniform float uWarpPositionFrequency;
+uniform float uWarpTimeFrequency;
+uniform float uWarpStrength;
+
+varying float vWobble;
+
+
+float getWoble(vec3 position)
+{
+    vec3 warpedPosition = position;
+    warpedPosition += simplexNoise4d(vec4(
+        position * uWarpPositionFrequency,
+        uTime * uWarpTimeFrequency
+    )) * uWarpStrength;
+
+
+    return simplexNoise4d(vec4(
+    warpedPosition * uPositionFrequency, // xyz
+    uTime *  uTimeFrequency// time
+    )) * uStrength;
+}
+
 
 void main()
 {
-    vec4 particle = texture(uParticlesTexture, aParticlesUv);
+vec3 biTangent = cross(normal, tangent.xyz);
 
-    // Final position
-    vec4 modelPosition = modelMatrix * vec4(particle.xyz, 1.0);
-    vec4 viewPosition = viewMatrix * modelPosition;
-    vec4 projectedPosition = projectionMatrix * viewPosition;
-    gl_Position = projectedPosition;
+// позиции соседей
+float shift = 1.9;
+vec3 positionA = csm_Position + tangent.xyz * shift;
+vec3 positionB = csm_Position + biTangent * shift;
 
-    // Point size
-    float sizeIn = smoothstep(0.0, 0.1, particle.a);
-    float sizeOut = 1.0 - smoothstep(0.7, 1.0, particle.a);
-    float size = min(sizeIn, sizeOut);
+float wobble = getWoble(csm_Position);
+csm_Position += wobble * normal;
+positionA += getWoble(positionA) * normal;
+positionB += getWoble(positionB) * normal;
 
-    gl_PointSize =size * aSize * uSize * uResolution.y;
-    gl_PointSize *= (1.0 / - viewPosition.z);
+vec3 toA = normalize(positionA - csm_Position);
+vec3 toB = normalize(positionB - csm_Position);
 
-    // Varyings
-    vColor =aColor;
-}
+csm_Normal = cross(toA, toB);
+
+vWobble = vWobble / uStrength;
+
+} 

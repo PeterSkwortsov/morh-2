@@ -1,13 +1,15 @@
-varying vec3 vColor;
+// #include ../includes/simplexNoise4d.glsl
+varying float vWobble;
+
+uniform vec3 uColorA;
+uniform vec3 uColorB;
 
 void main()
 {
-    float distanceToCenter = length(gl_PointCoord - 0.5);
-    if(distanceToCenter > 0.5)
-        discard;
     
-    gl_FragColor = vec4(vColor, 1.0);
+    float colorMix = smoothstep(-1.0, 1.0, vWobble);
+    csm_DiffuseColor.rgb = mix(uColorA, uColorB, colorMix);
 
-    #include <tonemapping_fragment>
-    #include <colorspace_fragment>
+    // csm_Metalness = step(0.25, vWobble);
+    // csm_Roughness = 1.0 - colorMix;
 }
