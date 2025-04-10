@@ -117,16 +117,26 @@ gui.add(material, 'ior', 0, 10, 0.001)
 gui.add(material, 'thickness', 0, 10, 0.001)
 
 // Geometry
-let geometry = new THREE.IcosahedronGeometry(2.5, 50)
-geometry = mergeVertices(geometry)
-geometry.computeTangents()
-console.log(geometry.attributes)
-// Mesh
-const wobble = new THREE.Mesh(geometry, material)
-wobble.customDepthMaterial = dephMaterial
-wobble.receiveShadow = true
-wobble.castShadow = true
-scene.add(wobble)
+// let geometry = new THREE.IcosahedronGeometry(2.5, 50)
+// geometry = mergeVertices(geometry)
+// geometry.computeTangents()
+// console.log(geometry.attributes)
+// // Mesh
+// const wobble = new THREE.Mesh(geometry, material)
+// wobble.customDepthMaterial = dephMaterial
+// wobble.receiveShadow = true
+// wobble.castShadow = true
+// scene.add(wobble)
+
+gltfLoader.load('./suzanne.glb', (gltf) => {
+ const wobler = gltf.scene.children[0]
+ wobler.receiveShadow = true
+ wobler.castShadow = true
+ wobler.material = material
+  wobler.customDephMaterial = dephMaterial
+
+  scene.add(wobler)
+})
 
 /**
  * Plane
