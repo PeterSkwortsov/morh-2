@@ -1,15 +1,21 @@
 // #include ../includes/simplexNoise4d.glsl
-varying float vWobble;
 
-uniform vec3 uColorA;
-uniform vec3 uColorB;
+varying vec3 vPosition;
+
+uniform float uSliceArc;
+uniform float uSliceStart;
 
 void main()
 {
     
-    float colorMix = smoothstep(-1.0, 1.0, vWobble);
-    csm_DiffuseColor.rgb = mix(uColorA, uColorB, colorMix);
 
-    // csm_Metalness = step(0.25, vWobble);
-    // csm_Roughness = 1.0 - colorMix;
+    float angale = atan(vPosition.y, vPosition.x);
+    angale -= uSliceStart;
+    angale = mod(angale, PI2);
+
+    if(angale > 0.0 && angale < uSliceArc)
+    discard;
+
+    float csm_Slice;
+ 
 }

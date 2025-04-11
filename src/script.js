@@ -2,165 +2,148 @@ import * as THREE from "three";
 import { OrbitControls } from "three/addons/controls/OrbitControls.js";
 import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
 import { DRACOLoader } from "three/addons/loaders/DRACOLoader.js";
-import { GPUComputationRenderer } from "three/examples/jsm/Addons.js";
+
 import GUI from "lil-gui";
 import particlesVertexShader from "./shaders/particles/vertex.glsl";
 import particlesFragmentShader from "./shaders/particles/fragment.glsl";
-import gpgpuParticlesShader from "./shaders/gpgpu/particles.glsl";
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js'
 import CustomSheaderMaterial from 'three-custom-shader-material/vanilla'
-import { mergeVertices } from "three/examples/jsm/utils/BufferGeometryUtils.js";
 
 
-/**
- * Base
- */
-// Debug
-const gui = new GUI({ width: 340 });
+const gui = new GUI({ width: 325 });
 const debugObject = {};
-debugObject.colorA = '#0000ff';
-debugObject.colorB = '#ff0000';
 
 // Canvas
-const canvas = document.querySelector('canvas.webgl')
+const canvas = document.querySelector("canvas.webgl");
 
 // Scene
-const scene = new THREE.Scene()
+const scene = new THREE.Scene();
 
 // Loaders
-const rgbeLoader = new RGBELoader()
-const dracoLoader = new DRACOLoader()
-dracoLoader.setDecoderPath('./draco/')
-const gltfLoader = new GLTFLoader()
-gltfLoader.setDRACOLoader(dracoLoader)
+const rgbeLoader = new RGBELoader();
+const dracoLoader = new DRACOLoader();
+dracoLoader.setDecoderPath("./draco/");
+const gltfLoader = new GLTFLoader();
+gltfLoader.setDRACOLoader(dracoLoader);
 
 /**
  * Environment map
  */
-rgbeLoader.load('./urban_alley_01_1k.hdr', (environmentMap) => {
-  environmentMap.mapping = THREE.EquirectangularReflectionMapping
+rgbeLoader.load("./aerodynamics_workshop.hdr", (environmentMap) => {
+  environmentMap.mapping = THREE.EquirectangularReflectionMapping;
 
-  scene.background = environmentMap
-  scene.environment = environmentMap
-})
+  scene.background = environmentMap;
+  scene.backgroundBlurriness = 0.5;
+  scene.environment = environmentMap;
+});
+
 
 const uniforms = {
-  uTime: new THREE.Uniform(0),
-  uPositionFrequency: new THREE.Uniform(0.5),
-  uTimeFrequency: new THREE.Uniform(0.4),
-  uStrength: new THREE.Uniform(0.3),
-
-  uWarpPositionFrequency: new THREE.Uniform(0.38),
-  uWarpTimeFrequency: new THREE.Uniform(0.12),
-  uWarpStrength: new THREE.Uniform(1.7),
-
-  uColorA: new THREE.Uniform(new THREE.Color(debugObject.colorA)),
-  uColorB: new THREE.Uniform(new THREE.Color(debugObject.colorB)),
+  uSliceStart: new THREE.Uniform(1.75),
+  uSliceArc: new THREE.Uniform(1.25),
 }
 
+gui.add(uniforms.uSliceStart, 'value', -Math.PI, Math.PI, 0.001).name('uSliceStart')
+gui.add(uniforms.uSliceArc, 'value', 0, Math.PI * 2, 0.001).name('uSliceArc')
 
-/**
- * Wobble
- */
+const patchMap = {
+  csm_Slice: {
+    '#include <colorspace_fragment>': 
+    `
+    #include <colorspace_fragment>
+
+    if(!gl_FrontFacing)
+    gl_FragColor = vec4(0.75, 0.5, 0.3, 1.0);
+    `
+  }
+}
+
 // Material
-const material = new CustomSheaderMaterial({
-  // CSM, для пользовательского шейдера
-  baseMaterial: THREE.MeshPhysicalMaterial,
+const material = new THREE.MeshStandardMaterial({
+  metalness: 0.5,
+  roughness: 0.25,
+  envMapIntensity: 0.5,
+  color: "#858080",
+});
+
+const slicedMaterial = new CustomSheaderMaterial({
+  baseMaterial: THREE.MeshStandardMaterial,
   vertexShader: particlesVertexShader,
   fragmentShader: particlesFragmentShader,
   uniforms: uniforms,
+  patchMap: patchMap,
+  metalness: 0.5,
+  roughness: 0.25,
+  envMapIntensity: 0.5,
+  color: "#858080",
+  side: THREE.DoubleSide
+});
 
-
-  //свойства материала
-  metalness: 0,
-  roughness: 0.5,
-  color: '#ffffff',
-  transmission: 0,
-  ior: 1.5,
-  thickness: 1.5,
-  transparent: true,
-  wireframe: false
-})
-
-
-const dephMaterial = new CustomSheaderMaterial({
-  // CSM, для пользовательского шейдера
+const slicedDephMaterial = new CustomSheaderMaterial({ // материал для обновления тени
   baseMaterial: THREE.MeshDepthMaterial,
   vertexShader: particlesVertexShader,
   fragmentShader: particlesFragmentShader,
   uniforms: uniforms,
-  depthPacking: THREE.RGBADepthPacking,
+  patchMap: patchMap,
+  
+  depthPacking: THREE.RGBADepthPacking
 
-})
+});
 
-// Tweaks
-gui.add(uniforms.uPositionFrequency, 'value', 0, 2, 0.001).name('uPositionFrequency')
-gui.add(uniforms.uTimeFrequency, 'value', 0, 2, 0.001).name('uTimeFrequency')
-gui.add(uniforms.uStrength, 'value', 0, 2, 0.001).name('uStrength')
+// Model
+let model = null;
+gltfLoader.load('./gears.glb', (gltf) => {
+  model = gltf.scene
 
-gui.add(uniforms.uWarpPositionFrequency, 'value', 0, 2, 0.001).name('uWarpPositionFrequency')
-gui.add(uniforms.uWarpTimeFrequency, 'value', 0, 2, 0.001).name('uWarpTimeFrequency')
-gui.add(uniforms.uWarpStrength, 'value', 0, 2, 0.001).name('uWarpStrength')
+  model.traverse((child) => 
+    {
+    if(child.isMesh) 
+    {
+      if(child.name === 'outerHull') {
+        child.material = slicedMaterial
+        child.customDepthMaterial = slicedDephMaterial
+      } 
+      else {
+        child.material = material
+      }
 
-gui.addColor(debugObject, 'colorA').onChange(()=> {
-  uniforms.uColorA.value.set(debugObject.colorA)
-})
-gui.addColor(debugObject, 'colorB').onChange(()=> {
-  uniforms.uColorB.value.set(debugObject.colorB)
-})
+      child.castShadow = true
+      child.receiveShadow = true
+    }
+  })
 
-
-gui.add(material, 'metalness', 0, 1, 0.001)
-gui.add(material, 'roughness', 0, 1, 0.001)
-gui.add(material, 'transmission', 0, 1, 0.001)
-gui.add(material, 'ior', 0, 10, 0.001)
-gui.add(material, 'thickness', 0, 10, 0.001)
-
-// Geometry
-// let geometry = new THREE.IcosahedronGeometry(2.5, 50)
-// geometry = mergeVertices(geometry)
-// geometry.computeTangents()
-// console.log(geometry.attributes)
-// // Mesh
-// const wobble = new THREE.Mesh(geometry, material)
-// wobble.customDepthMaterial = dephMaterial
-// wobble.receiveShadow = true
-// wobble.castShadow = true
-// scene.add(wobble)
-
-gltfLoader.load('./suzanne.glb', (gltf) => {
- const wobler = gltf.scene.children[0]
- wobler.receiveShadow = true
- wobler.castShadow = true
- wobler.material = material
-  wobler.customDephMaterial = dephMaterial
-
-  scene.add(wobler)
+  scene.add(model)
 })
 
 /**
  * Plane
  */
 const plane = new THREE.Mesh(
-  new THREE.PlaneGeometry(15, 15, 15),
-  new THREE.MeshStandardMaterial()
-)
-plane.receiveShadow = true
-plane.rotation.y = Math.PI
-plane.position.y = - 5
-plane.position.z = 5
-scene.add(plane)
+  new THREE.PlaneGeometry(10, 10, 10),
+  new THREE.MeshStandardMaterial({ color: "#aaaaaa" })
+);
+plane.receiveShadow = true;
+plane.position.x = -4;
+plane.position.y = -3;
+plane.position.z = -4;
+plane.lookAt(new THREE.Vector3(0, 0, 0));
+scene.add(plane);
 
 /**
  * Lights
  */
-const directionalLight = new THREE.DirectionalLight('#ffffff', 3)
-directionalLight.castShadow = true
-directionalLight.shadow.mapSize.set(1024, 1024)
-directionalLight.shadow.camera.far = 15
-directionalLight.shadow.normalBias = 0.05
-directionalLight.position.set(0.25, 2, - 2.25)
-scene.add(directionalLight)
+const directionalLight = new THREE.DirectionalLight("#ffffff", 4);
+directionalLight.position.set(6.25, 3, 4);
+directionalLight.castShadow = true;
+directionalLight.shadow.mapSize.set(1024, 1024);
+directionalLight.shadow.camera.near = 0.1;
+directionalLight.shadow.camera.far = 30;
+directionalLight.shadow.normalBias = 0.05;
+directionalLight.shadow.camera.top = 8;
+directionalLight.shadow.camera.right = 8;
+directionalLight.shadow.camera.bottom = -8;
+directionalLight.shadow.camera.left = -8;
+scene.add(directionalLight);
 
 /**
  * Sizes
@@ -168,68 +151,76 @@ scene.add(directionalLight)
 const sizes = {
   width: window.innerWidth,
   height: window.innerHeight,
-  pixelRatio: Math.min(window.devicePixelRatio, 2)
-}
+  pixelRatio: Math.min(window.devicePixelRatio, 2),
+};
 
-window.addEventListener('resize', () => {
+window.addEventListener("resize", () => {
   // Update sizes
-  sizes.width = window.innerWidth
-  sizes.height = window.innerHeight
-  sizes.pixelRatio = Math.min(window.devicePixelRatio, 2)
+  sizes.width = window.innerWidth;
+  sizes.height = window.innerHeight;
+  sizes.pixelRatio = Math.min(window.devicePixelRatio, 2);
 
   // Update camera
-  camera.aspect = sizes.width / sizes.height
-  camera.updateProjectionMatrix()
+  camera.aspect = sizes.width / sizes.height;
+  camera.updateProjectionMatrix();
 
   // Update renderer
-  renderer.setSize(sizes.width, sizes.height)
-  renderer.setPixelRatio(sizes.pixelRatio)
-})
+  renderer.setSize(sizes.width, sizes.height);
+  renderer.setPixelRatio(sizes.pixelRatio);
+});
 
 /**
  * Camera
  */
 // Base camera
-const camera = new THREE.PerspectiveCamera(35, sizes.width / sizes.height, 0.1, 100)
-camera.position.set(13, - 3, - 5)
-scene.add(camera)
+const camera = new THREE.PerspectiveCamera(
+  35,
+  sizes.width / sizes.height,
+  0.1,
+  100
+);
+camera.position.set(-5, 5, 12);
+scene.add(camera);
 
 // Controls
-const controls = new OrbitControls(camera, canvas)
-controls.enableDamping = true
+const controls = new OrbitControls(camera, canvas);
+controls.enableDamping = true;
 
 /**
  * Renderer
  */
 const renderer = new THREE.WebGLRenderer({
   canvas: canvas,
-  antialias: true
-})
-renderer.shadowMap.enabled = true
-renderer.shadowMap.type = THREE.PCFSoftShadowMap
-renderer.toneMapping = THREE.ACESFilmicToneMapping
-renderer.toneMappingExposure = 1
-renderer.setSize(sizes.width, sizes.height)
-renderer.setPixelRatio(sizes.pixelRatio)
+  antialias: true,
+});
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1;
+renderer.setSize(sizes.width, sizes.height);
+renderer.setPixelRatio(sizes.pixelRatio);
 
 /**
  * Animate
  */
-const clock = new THREE.Clock()
+const clock = new THREE.Clock();
 
 const tick = () => {
-  const elapsedTime = clock.getElapsedTime()
-
-  uniforms.uTime.value = elapsedTime * 0.5
+  const elapsedTime = clock.getElapsedTime();
 
   // Update controls
-  controls.update()
+  controls.update();
 
+  if (model) {
+    model.rotation.y = elapsedTime * 0.1
+
+  } 
+  
   // Render
-  renderer.render(scene, camera)
+  renderer.render(scene, camera);
 
   // Call tick again on the next frame
-  window.requestAnimationFrame(tick)
-}
+  window.requestAnimationFrame(tick);
+};
 
-tick()
+tick();
