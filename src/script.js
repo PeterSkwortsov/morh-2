@@ -18,13 +18,13 @@ import { RGBShiftShader } from "three/examples/jsm/Addons.js";
 import { GammaCorrectionShader } from "three/examples/jsm/Addons.js";
 import { compress } from "three/examples/jsm/libs/fflate.module.js";
 import { SMAAPass } from "three/examples/jsm/Addons.js";
-import { uniform } from "three/tsl";
+import { texture, textureLoad, uniform } from "three/tsl";
+import { TextureLoader } from "three/webgpu";
 
 const gui = new GUI({ width: 325 });
 const debugObject = {};
 
-
-
+const textureLoader = new THREE.TextureLoader()
 // Canvas
 const canvas = document.querySelector("canvas.webgl");
 
@@ -55,7 +55,7 @@ gltfLoader.load(
 /**
  * Environment map
  */
-rgbeLoader.load("./my-hdri-cart.hdr", (environmentMap) => {
+rgbeLoader.load("./urban_alley_01_1k.hdr", (environmentMap) => {
   environmentMap.mapping = THREE.EquirectangularReflectionMapping;
 
   scene.background = environmentMap;
@@ -66,7 +66,7 @@ rgbeLoader.load("./my-hdri-cart.hdr", (environmentMap) => {
 
 //Mesh
 
-const directionalLight = new THREE.DirectionalLight('#ffffff', 3)
+const directionalLight = new THREE.DirectionalLight('#ffffff', 6)
 directionalLight.castShadow = true
 directionalLight.shadow.mapSize.set(1024, 1024)
 directionalLight.shadow.camera.far = 15
@@ -225,6 +225,51 @@ gui.add(tintPass.material.uniforms.uTint.value, 'x').min(-1).max(1).step(0.001).
 gui.add(tintPass.material.uniforms.uTint.value, 'y').min(-1).max(1).step(0.001).name('green')
 gui.add(tintPass.material.uniforms.uTint.value, 'z').min(-1).max(1).step(0.001).name('blue')
 
+// ----------------------------------------
+
+const DisplacementSheader = {
+  uniforms: {
+    tDiffuse: { value: null },
+    uNormalMap: { value: null}  
+  },
+  vertexShader: `
+  varying vec2 vUv;
+
+  void main() 
+  {
+    gl_Position = projectionMatrix * 
+    modelViewMatrix * vec4(position, 1.0);
+
+    vUv = uv;
+  }
+  `,
+  fragmentShader: `
+  uniform sampler2D tDiffuse;
+  uniform sampler2D uNormalMap;
+
+  varying vec2 vUv;
+
+    void main()
+    {
+      vec3 normalColor = texture2D(uNormalMap, vUv).xyz * 2.0 - 1.0;
+      vec2 newUv = vUv + normalColor.xy * 0.1;
+      vec4 color = texture2D(tDiffuse, newUv);
+
+      vec3 lightDirection = normalize(vec3(-1.0, 1.0, 0.0));
+      float ligtness = clamp(dot(normalColor, lightDirection), 0.0, 1.0);
+      color.rgb += ligtness * 2.0;
+      gl_FragColor = color;
+    }
+  `
+}
+
+const displacementPass = new ShaderPass(DisplacementSheader)
+displacementPass.material.uniforms.uNormalMap.value = textureLoader.load('./interfaceNormalMap.png')
+effectComposer.addPass(displacementPass)
+
+// ----------------------------------------
+
+
 if (renderer.getPixelRatio() === 1 && !renderer.capabilities.isWebGL2) 
 {
   const smaaPass = new SMAAPass()
@@ -238,7 +283,6 @@ const tick = () => {
   const elapsedTime = clock.getElapsedTime();
 
   //Unifroms
-
   // Update controls
   controls.update();
 
