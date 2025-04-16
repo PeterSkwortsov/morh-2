@@ -7,18 +7,23 @@ import GUI from "lil-gui";
 import particlesVertexShader from "./shaders/particles/vertex.glsl";
 import particlesFragmentShader from "./shaders/particles/fragment.glsl";
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js'
-import CustomSheaderMaterial from 'three-custom-shader-material/vanilla'
 import { Evaluator ,Brush, SUBTRACTION } from "three-bvh-csg";
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from "three/examples/jsm/Addons.js";
+import { DotScreenPass } from "three/examples/jsm/Addons.js";
+import { GlitchPass } from "three/examples/jsm/Addons.js";
+import { UnrealBloomPass } from "three/examples/jsm/Addons.js";
+import { ShaderPass } from "three/examples/jsm/postprocessing/ShaderPass.js";
+import { RGBShiftShader } from "three/examples/jsm/Addons.js";
+import { GammaCorrectionShader } from "three/examples/jsm/Addons.js";
+import { compress } from "three/examples/jsm/libs/fflate.module.js";
+import { SMAAPass } from "three/examples/jsm/Addons.js";
+import { uniform } from "three/tsl";
 
 const gui = new GUI({ width: 325 });
 const debugObject = {};
 
-debugObject.colorWaterDeep = "#002b3d";
-debugObject.colorWaterSurface = "#66a8ff";
-debugObject.colorSand = "#ffe894";
-debugObject.colorGrass = "#85d534";
-debugObject.colorSnow = "#ffffff";
-debugObject.colorRock = "#bfbd8d";
+
 
 // Canvas
 const canvas = document.querySelector("canvas.webgl");
@@ -28,163 +33,47 @@ const scene = new THREE.Scene();
 
 // Loaders
 const rgbeLoader = new RGBELoader();
-const dracoLoader = new DRACOLoader();
-dracoLoader.setDecoderPath("./draco/");
+// const dracoLoader = new DRACOLoader();
+// dracoLoader.setDecoderPath("./draco/");
 const gltfLoader = new GLTFLoader();
-gltfLoader.setDRACOLoader(dracoLoader);
+// gltfLoader.setDRACOLoader(dracoLoader);
+
+
+
+gltfLoader.load(
+  '/models/DamagedHelmet/glTF/DamagedHelmet.gltf',
+  (gltf) => {
+    gltf.scene.scale.set(2, 2, 2)
+    gltf.scene.rotation.y = Math.PI * 1.3
+    scene.add(gltf.scene)
+
+    // updateAllMaterials()
+  }
+)
+
 
 /**
  * Environment map
  */
-rgbeLoader.load("./aerodynamics_workshop.hdr", (environmentMap) => {
+rgbeLoader.load("./my-hdri-cart.hdr", (environmentMap) => {
   environmentMap.mapping = THREE.EquirectangularReflectionMapping;
 
   scene.background = environmentMap;
-  scene.backgroundBlurriness = 0.5;
+  // scene.backgroundBlurriness = 0.5;
   scene.environment = environmentMap;
 });
 
 
-
-
-
-const geometry = new THREE.PlaneGeometry(10, 10, 500, 500);
-geometry.deleteAttribute("uv", "normal");
-geometry.rotateX(-Math.PI * 0.5);
-
-//Matrial
-debugObject.colorWaterDeep = "#002b3d";
-debugObject.colorWaterSurface = "#66a8ff";
-debugObject.colorSand = "#ffe894";
-debugObject.colorGrass = "#85d534";
-debugObject.colorSnow = "#ffffff";
-debugObject.colorRock = "#bfbd8d";
-
-const uniforms = {
-  uPositionFrequency: new THREE.Uniform(0.2),
-  uStrength: new THREE.Uniform(2.0),
-  uWarpFrequency: new THREE.Uniform(5),
-  uWarpStrength: new THREE.Uniform(0.5),
-  uTime: new THREE.Uniform(0),
-
-  uColorWaterDeep: new THREE.Uniform(
-    new THREE.Color(debugObject.colorWaterDeep)
-  ),
-  uColorWaterSurface: new THREE.Uniform(
-    new THREE.Color(debugObject.colorWaterSurface)
-  ),
-  uColorSand: new THREE.Uniform(new THREE.Color(debugObject.colorSand)),
-  uColorGrass: new THREE.Uniform(new THREE.Color(debugObject.colorGrass)),
-  uColorSnow: new THREE.Uniform(new THREE.Color(debugObject.colorSnow)),
-  uColorRock: new THREE.Uniform(new THREE.Color(debugObject.colorRock)),
-};
-gui
-  .add(uniforms.uPositionFrequency, "value", 0, 1, 0.001)
-  .name("uPositionFrequency");
-gui.add(uniforms.uStrength, "value", 0, 10, 0.001).name("uStrength");
-gui.add(uniforms.uWarpFrequency, "value", 0, 10, 0.001).name("uWarpFrequency");
-gui.add(uniforms.uWarpStrength, "value", 0, 1, 0.001).name("uWarpStrength");
-
-gui.addColor(debugObject, "colorWaterDeep").onChange(() => {
-  uniforms.uColorWaterDeep.value.set(debugObject.colorWaterDeep);
-});
-gui.addColor(debugObject, "colorWaterSurface").onChange(() => {
-  uniforms.uColorWaterSurface.value.set(debugObject.colorWaterSurface);
-});
-gui.addColor(debugObject, "colorSand").onChange(() => {
-  uniforms.uColorSand.value.set(debugObject.colorSand);
-});
-gui.addColor(debugObject, "colorGrass").onChange(() => {
-  uniforms.uColorGrass.value.set(debugObject.colorGrass);
-});
-gui.addColor(debugObject, "colorSnow").onChange(() => {
-  uniforms.uColorSnow.value.set(debugObject.colorSnow);
-});
-gui.addColor(debugObject, "colorRock").onChange(() => {
-  uniforms.uColorRock.value.set(debugObject.colorRock);
-});
-
-const material = new CustomShaderMaterial({
-  //CSM
-  baseMaterial: THREE.MeshStandardMaterial,
-  vertexShader: particlesVertexShader,
-  fragmentShader: particlesFragmentShader,
-  uniforms,
-  silent: true,
-
-  //MeshStandardMaterial
-  metalness: 0,
-  roughness: 0.5,
-  color: "#85d534",
-});
-const depthMaterial = new CustomShaderMaterial({
-  //CSM
-  baseMaterial: THREE.MeshDepthMaterial,
-  vertexShader: particlesVertexShader,
-  uniforms,
-  silent: true,
-
-  //MeshDepthMaterial
-  depthPacking: THREE.RGBADepthPacking,
-});
-
 //Mesh
-const terrain = new THREE.Mesh(geometry, material);
-terrain.customDepthMaterial = depthMaterial;
-terrain.receiveShadow = true;
-terrain.castShadow = true;
-scene.add(terrain);
 
-/**
- * Water
- */
-const water = new THREE.Mesh(
-  new THREE.PlaneGeometry(10, 10, 1, 1),
-  new THREE.MeshPhysicalMaterial({
-    transmission: 1,
-    roughness: 0.3,
-  })
-);
-water.rotation.x = -Math.PI / 2;
-water.position.y = -0.1;
-scene.add(water);
+const directionalLight = new THREE.DirectionalLight('#ffffff', 3)
+directionalLight.castShadow = true
+directionalLight.shadow.mapSize.set(1024, 1024)
+directionalLight.shadow.camera.far = 15
+directionalLight.shadow.normalBias = 0.05
+directionalLight.position.set(0.25, 3, - 2.25)
+scene.add(directionalLight)
 
-/**
- * Board
- */
-//Brushes
-const boardFill = new Brush(new THREE.BoxGeometry(11, 2, 11));
-const boardHole = new Brush(new THREE.BoxGeometry(10, 2.1, 10));
-// boardHole.position.y = 0.2;
-// boardHole.updateMatrixWorld();
-
-//Evaluate
-const evaluator = new Evaluator();
-const board = evaluator.evaluate(boardFill, boardHole, SUBTRACTION);
-board.geometry.clearGroups();
-board.material = new THREE.MeshStandardMaterial({
-  color: "#ffffff",
-  metalness: 0,
-  roughness: 0,
-});
-board.castShadow = true;
-board.receiveShadow = true;
-scene.add(board);
-
-/**
- * Lights
- */
-const directionalLight = new THREE.DirectionalLight("#ffffff", 2);
-directionalLight.position.set(6.25, 3, 4);
-directionalLight.castShadow = true;
-directionalLight.shadow.mapSize.set(1024, 1024);
-directionalLight.shadow.camera.near = 0.1;
-directionalLight.shadow.camera.far = 30;
-directionalLight.shadow.camera.top = 8;
-directionalLight.shadow.camera.right = 8;
-directionalLight.shadow.camera.bottom = -8;
-directionalLight.shadow.camera.left = -8;
-scene.add(directionalLight);
 
 /**
  * Sizes
@@ -208,7 +97,15 @@ window.addEventListener("resize", () => {
   // Update renderer
   renderer.setSize(sizes.width, sizes.height);
   renderer.setPixelRatio(sizes.pixelRatio);
+
+  effectComposer.setSize(sizes.width, sizes.height)
+  effectComposer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
 });
+
+
+
+
+
 
 /**
  * Camera
@@ -237,27 +134,117 @@ const renderer = new THREE.WebGLRenderer({
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.outputEncoding = THREE.sRGBEncoding;
 renderer.toneMappingExposure = 1;
 renderer.setSize(sizes.width, sizes.height);
 renderer.setPixelRatio(sizes.pixelRatio);
 
-/**
- * Animate
- */
+
+
+const renderTarget = new THREE.WebGLRenderTarget(
+  800, 
+  600, 
+  {
+    samples: renderer.getPixelRatio() === 1 ? 2 : 0
+  }
+)  // это для сглаживания
+
+const effectComposer = new EffectComposer(renderer, renderTarget) // применили renderTarget тут
+
+effectComposer.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+effectComposer.setSize(sizes.width, sizes.height) 
+
+const renderPass = new RenderPass(scene, camera)
+effectComposer.addPass(renderPass)
+
+const dotScreenPass = new DotScreenPass()
+dotScreenPass.enabled = false
+effectComposer.addPass(dotScreenPass)
+
+const glitchPass = new GlitchPass()
+// glitchPass.goWild = true //будет все время гонять эту картинку
+glitchPass.enabled = false
+effectComposer.addPass(glitchPass)
+
+const rGBShiftShader = new ShaderPass(RGBShiftShader)
+rGBShiftShader.enabled = false
+effectComposer.addPass(rGBShiftShader)
+
+const gammaCorrectionPass = new ShaderPass(GammaCorrectionShader)
+effectComposer.addPass(gammaCorrectionPass)
+
+const unrealBloomPass = new UnrealBloomPass()
+unrealBloomPass.strength = 0.3
+unrealBloomPass.radius = 1
+unrealBloomPass.threshold = 0.6
+effectComposer.addPass(unrealBloomPass)
+
+gui.add(unrealBloomPass, 'enabled')
+gui.add(unrealBloomPass, 'strength').min(0).max(2).step(0.01)
+gui.add(unrealBloomPass, 'radius').min(0).max(2).step(0.01)
+gui.add(unrealBloomPass, 'threshold').min(0).max(1).step(0.01)
+
+
+const TintSeader = {
+  uniforms: {
+    tDiffuse: {value: null},
+    uTint: {value: null}
+   },
+  vertexShader: `
+  varying vec2 vUv;
+
+  void main() 
+  {
+    gl_Position = projectionMatrix * 
+    modelViewMatrix * vec4(position, 1.0);
+
+    vUv = uv;
+  }
+  `,
+  fragmentShader: `
+  uniform sampler2D tDiffuse;
+  uniform vec3 uTint;
+
+  varying vec2 vUv;
+
+    void main()
+    {
+      vec4 color = texture2D(tDiffuse, vUv);
+      color.rgb += uTint;
+
+      gl_FragColor = color;
+    }
+  `
+}
+
+const tintPass = new ShaderPass(TintSeader)
+tintPass.material.uniforms.uTint.value = new THREE.Vector3()
+effectComposer.addPass(tintPass)
+
+gui.add(tintPass.material.uniforms.uTint.value, 'x').min(-1).max(1).step(0.001).name('red')
+gui.add(tintPass.material.uniforms.uTint.value, 'y').min(-1).max(1).step(0.001).name('green')
+gui.add(tintPass.material.uniforms.uTint.value, 'z').min(-1).max(1).step(0.001).name('blue')
+
+if (renderer.getPixelRatio() === 1 && !renderer.capabilities.isWebGL2) 
+{
+  const smaaPass = new SMAAPass()
+  effectComposer.addPass(smaaPass)
+}
+
+
 const clock = new THREE.Clock();
 
 const tick = () => {
   const elapsedTime = clock.getElapsedTime();
 
   //Unifroms
-  uniforms.uTime.value = elapsedTime;
 
   // Update controls
   controls.update();
 
   // Render
-  renderer.render(scene, camera);
-
+// renderer.render(scene, camera)
+effectComposer.render()
   // Call tick again on the next frame
   window.requestAnimationFrame(tick);
 };
