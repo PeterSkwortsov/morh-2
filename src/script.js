@@ -35,7 +35,7 @@ ambientLight.visible = true
 scene.add(ambientLight)
 
 const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 100)
-camera.position.set(-1.1, 2.4, 1.3)
+camera.position.set(0, 0, 7)
 
 const renderer = new THREE.WebGLRenderer({ antialias: true })
 renderer.toneMapping = THREE.ACESFilmicToneMapping
@@ -129,23 +129,58 @@ floor.castShadow = false
 floor.receiveShadow = true
 
 
-const geometries = []
+// const geometries = []
+// const material = new THREE.MeshNormalMaterial()
+
+// for (let i = 0; i < 50; i++) {
+
+
+//   const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5)
+
+//   geometry.rotateX(10 * Math.random())
+//   geometry.rotateY(10 * Math.random())
+
+//   geometry.translate(
+//     (Math.random() - 0.5) * 10,
+//     (Math.random() - 0.5) * 10,
+//     (Math.random() - 0.5) * 10,
+//     (Math.random() - 0.5) * Math.PI,
+   
+//   )
+
+//   geometries.push(geometry)
+// }
+
+// const mergedGeometry = BufferGeometryUtils.mergeGeometries(geometries) // с помощью BufferGeometryUtils НЕ ЗАБУДЬ ИМПОРТИРОВАТЬ ЕЕ! Можно все оптимизировать
+// const mesh = new THREE.Mesh(mergedGeometry, material)
+// scene.add(mesh)
+
+
+const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5)
+const material = new THREE.MeshNormalMaterial()
+const mesh = new THREE.InstancedMesh(geometry, material, 50)
+
 for (let i = 0; i < 50; i++) {
 
-  const geometry = new THREE.BoxGeometry(0.5, 0.5, 0.5)
-  geometry.translate(
+  const position = new THREE.Vector3(
     (Math.random() - 0.5) * 10,
     (Math.random() - 0.5) * 10,
-    (Math.random() - 0.5) * 10
-   
+    (Math.random() - 0.5) * 10,
   )
 
-  geometries.push(geometry)
-}
+  const quaternion = new THREE.Quaternion()
+  quaternion.setFromEuler(new THREE.Euler(
+    (Math.random() - 0.5) * Math.PI * 2, 
+    (Math.random() - 0.5) * Math.PI * 2,
+    0
+  ))
 
-const mergedGeometry = BufferGeometryUtils.mergeGeometries(geometries) // с помощью BufferGeometryUtils НЕ ЗАБУДЬ ИМПОРТИРОВАТЬ ЕЕ! Можно все оптимизировать
-const material = new THREE.MeshNormalMaterial()
-const mesh = new THREE.Mesh(mergedGeometry, material)
+  const matrix = new THREE.Matrix4()
+  matrix.makeRotationFromQuaternion(quaternion)
+  matrix.setPosition(position)
+  mesh.setMatrixAt(i, matrix)
+
+}
 scene.add(mesh)
 
 
@@ -153,7 +188,11 @@ scene.add(mesh)
 
 
 
-// // Tip 12
+
+
+
+
+
 renderer.shadowMap.autoUpdate = false
 renderer.shadowMap.needsUpdate = true
 
