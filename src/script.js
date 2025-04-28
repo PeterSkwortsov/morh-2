@@ -9,8 +9,14 @@ import particlesFragmentShader from "./shaders/particles/fragment.glsl";
 import { RGBELoader } from 'three/addons/loaders/RGBELoader.js'
 import CustomSheaderMaterial from 'three-custom-shader-material/vanilla'
 import gsap from "gsap";
+import { element } from "three/tsl";
+import { Raycaster } from "three/webgpu";
 
-const gui = new GUI({ width: 325 });
+
+let sceenReady = false
+
+
+// const gui = new GUI({ width: 325 });
 const debugObject = {};
 
 // Canvas
@@ -33,6 +39,9 @@ const loadingManager = new THREE.LoadingManager(
       loadingBarElement.style.transform = ''
     })
 
+    window.setTimeout(() => {
+      sceenReady = true
+    }, 2000)
     
   }, 
   (one, two, three) => {
@@ -110,10 +119,24 @@ gltfLoader.load(
     }
 )
 
+const raycaster = new Raycaster()
 
-/**
- * Plane
- */
+const points = [
+  {
+    position: new THREE.Vector3(1.55, 0.5, -0.6),
+    element: document.querySelector('.point-0')
+  },
+  {
+    position: new THREE.Vector3(0.5, 0.8, -1.0),
+    element: document.querySelector('.point-1')
+  },
+  {
+    position: new THREE.Vector3(1.6, -1.3, -0.7),
+    element: document.querySelector('.point-2')
+  },
+]
+
+
 
 /**
  * Lights
@@ -197,7 +220,38 @@ const tick = () => {
   // Update controls
   controls.update();
 
+  if (sceenReady) {
+    for (const point of points) {
+      const screenPosition = point.position.clone()
+      screenPosition.project(camera)
 
+      raycaster.setFromCamera(screenPosition, camera)
+      const intersects = raycaster.intersectObjects(scene.children, true)
+
+
+      if (intersects.length === 0) {
+        point.element.classList.add('visable')
+      }
+      else {
+        const intersectionDistance = intersects[0].distance
+        const pointDistance = point.position.distanceTo(camera.position)
+
+        if (intersectionDistance < pointDistance) {
+          point.element.classList.remove('visible')
+        } else {
+          point.element.classList.add('visible')
+
+        }
+      }
+
+      const translateX = screenPosition.x * sizes.width * 0.5
+      const translateY = -screenPosition.y * sizes.height * 0.5
+      point.element.style.transform = `translateX(${translateX}px) translateY(${translateY}px)`
+
+    }
+  }
+
+  
 
   // Render
   renderer.render(scene, camera);
